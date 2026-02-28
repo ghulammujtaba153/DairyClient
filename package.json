@@ -1,6 +1,9 @@
 {
       "name": "Dairy Business Management System",
       "version": "0.1.0",
+      "scripts": {
+            "build": "vite build"
+      },
       "private": true,
       "dependencies": {
             "@radix-ui/react-accordion": "^1.2.3",

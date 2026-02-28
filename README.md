@@ -1,11 +1,1 @@
-
-  # Dairy Business Management System
-
-  This is a code bundle for Dairy Business Management System. The original project is available at https://www.figma.com/design/Mkl81tzASckEjDXPOAvwOW/Dairy-Business-Management-System.
-
-  ## Running the code
-
-  Run `npm i` to install the dependencies.
-
-  Run `npm run dev` to start the development server.
-  
+# Dairy Business Management System
