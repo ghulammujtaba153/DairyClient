@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthetic: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Custom App Variables */
+  --dairy-green: #22c55e;
+  --dairy-green-light: #86efac;
+  --dairy-green-dark: #16a34a;
+  --navy: #1e293b;
+  --charcoal: #334155;
+  --cream: #fefce8;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+}
+
+body {
+  margin: 0;
+  /* Keep tailwind default layout for body if it wasn't flex center before my override, but since it was a standard vite react app, let's reset to defaults */
+  background: #f8fafc;
+  color: var(--navy);
+}
+
+@layer base {
+  /* Global input text color */
+  input, select, textarea {
+    color: #000000;
+  }
+}
