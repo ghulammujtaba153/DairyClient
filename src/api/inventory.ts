@@ -21,7 +21,7 @@ export interface ProductStock {
   in_market_quantity: number;
   unit: string;
   min_stock_level: number;
-  price_per_unit: number;
+  price: number;
   status?: 'good' | 'low' | 'oversold';
   valueInHand?: number;
   valueInMarket?: number;
@@ -36,6 +36,7 @@ export interface StockMovement {
   unit: string;
   reference_id: string;
   source_destination: string;
+  price?: number;
 }
 
 export interface InventoryStats {

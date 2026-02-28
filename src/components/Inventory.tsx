@@ -17,12 +17,10 @@ interface MovementModalProps {
 
 function MovementModal({ isOpen, onClose, onSuccess, products, editingMovement }: MovementModalProps) {
   const [formData, setFormData] = useState({
-    product_name: '',
-    movement_type: 'in',
-    quantity: '',
     unit: 'kg',
     reference_id: '',
-    source_destination: ''
+    source_destination: '',
+    price: ''
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -34,7 +32,8 @@ function MovementModal({ isOpen, onClose, onSuccess, products, editingMovement }
         quantity: editingMovement.quantity.toString(),
         unit: editingMovement.unit,
         reference_id: editingMovement.reference_id || '',
-        source_destination: editingMovement.source_destination || ''
+        source_destination: editingMovement.source_destination || '',
+        price: editingMovement.price?.toString() || ''
       });
     } else {
       setFormData({
@@ -43,7 +42,8 @@ function MovementModal({ isOpen, onClose, onSuccess, products, editingMovement }
         quantity: '',
         unit: 'kg',
         reference_id: '',
-        source_destination: ''
+        source_destination: '',
+        price: ''
       });
     }
   }, [editingMovement]);
@@ -62,7 +62,8 @@ function MovementModal({ isOpen, onClose, onSuccess, products, editingMovement }
       } else {
         await recordMovement({
           ...formData,
-          quantity: Number(formData.quantity)
+          quantity: Number(formData.quantity),
+          price: Number(formData.price || 0)
         });
       }
       onSuccess();
@@ -104,6 +105,14 @@ function MovementModal({ isOpen, onClose, onSuccess, products, editingMovement }
                 <option key={p.id} value={p.product_name}>{p.product_name}</option>
               ))}
             </select>
+            {formData.product_name && (
+              <p className="text-xs text-slate-500 mt-1">
+                Asset Value: PKR {(products.find(p => p.product_name === formData.product_name)?.price || 0).toLocaleString()} 
+                {Number(products.find(p => p.product_name === formData.product_name)?.in_hand_quantity) > 0 && 
+                  ` (Est. Cost: PKR ${(Number(products.find(p => p.product_name === formData.product_name)?.price || 0) / Number(products.find(p => p.product_name === formData.product_name)?.in_hand_quantity)).toFixed(2)} / ${formData.unit})`
+                }
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -154,6 +163,18 @@ function MovementModal({ isOpen, onClose, onSuccess, products, editingMovement }
               className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[var(--dairy-green)] outline-none"
               value={formData.source_destination}
               onChange={(e: any) => setFormData({ ...formData, source_destination: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Value / Price (PKR)</label>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Total value of this movement"
+              className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[var(--dairy-green)] outline-none"
+              value={formData.price}
+              onChange={(e: any) => setFormData({ ...formData, price: e.target.value })}
             />
           </div>
 
@@ -331,8 +352,12 @@ export function Inventory() {
           const available = inHand - inMarket;
           const minStock = Number(item.min_stock_level);
           const status = available < 0 ? 'oversold' : available < minStock ? 'low' : 'good';
-          const valueInHand = inHand * Number(item.price_per_unit || 0);
-          const valueInMarket = inMarket * Number(item.price_per_unit || 0);
+          
+          // item.price is the total accumulated cost (Asset Value)
+          const totalValue = Number(item.price || 0);
+          const unitPrice = inHand > 0 ? totalValue / inHand : 0;
+          const valueInWarehouse = available * unitPrice;
+          const valueInMarket = inMarket * unitPrice;
 
           return (
             <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:border-green-600 transition-all group">
@@ -373,9 +398,9 @@ export function Inventory() {
                     <ArrowDownLeft size={14} className="text-green-600" />
                   </div>
                   <p className="text-2xl font-bold text-green-700">
-                    {inHand} <span className="text-sm">{item.unit}</span>
+                    {available} <span className="text-sm">{item.unit}</span>
                   </p>
-                  <p className="text-xs text-slate-600 mt-1">PKR {valueInHand.toLocaleString()}</p>
+                  <p className="text-xs text-slate-600 mt-1">PKR {valueInWarehouse.toLocaleString()}</p>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 transition-colors group-hover:bg-blue-100/50">
                   <div className="flex items-center justify-between mb-1">
@@ -396,7 +421,7 @@ export function Inventory() {
                       : 'bg-purple-50 border-purple-200 group-hover:bg-purple-100/50'
                   }`}
                 >
-                  <p className="text-xs text-slate-600 mb-1">Available</p>
+                  <p className="text-xs text-slate-600 mb-1">Stock Total</p>
                   <p
                     className={`text-2xl font-bold ${
                       available < 0
@@ -406,7 +431,7 @@ export function Inventory() {
                         : 'text-purple-700'
                     }`}
                   >
-                    {available} <span className="text-sm">{item.unit}</span>
+                    {inHand} <span className="text-sm">{item.unit}</span>
                   </p>
                 </div>
               </div>
@@ -458,6 +483,7 @@ export function Inventory() {
                 <th className="text-left py-4 px-4 text-sm font-semibold text-slate-700">Product</th>
                 <th className="text-center py-4 px-4 text-sm font-semibold text-slate-700">Type</th>
                 <th className="text-right py-4 px-4 text-sm font-semibold text-slate-700">Quantity</th>
+                <th className="text-right py-4 px-4 text-sm font-semibold text-slate-700">Value (PKR)</th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-slate-700">Reference</th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-slate-700">Source/Destination</th>
                 <th className="text-center py-4 px-4 text-sm font-semibold text-slate-700">Actions</th>
@@ -494,6 +520,9 @@ export function Inventory() {
                   }`}>
                     {movement.movement_type === 'in' ? '+' : movement.movement_type === 'market' ? '→' : '-'}
                     {movement.quantity} {movement.unit}
+                  </td>
+                  <td className="py-4 px-4 text-sm text-right font-medium text-slate-900">
+                    {movement.price ? `PKR ${Number(movement.price).toLocaleString()}` : '-'}
                   </td>
                   <td className="py-4 px-4 text-sm text-slate-600">{movement.reference_id}</td>
                   <td className="py-4 px-4 text-sm text-slate-900 font-medium">{movement.source_destination}</td>
