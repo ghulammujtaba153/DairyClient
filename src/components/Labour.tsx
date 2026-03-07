@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router';
-import { Plus, Users, DollarSign, TrendingDown, Calendar, Loader2, X, Check, Clock, AlertCircle, ExternalLink } from 'lucide-react';
+import { Plus, Users, DollarSign, TrendingDown, Calendar, Loader2, X, Check, Clock, AlertCircle, ExternalLink, Trash2, Edit2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { 
   getLabour, getLabourStats, createLabour, 
   markAttendance, recordAdvance, getRecentTransactions,
+  deleteLabour, deleteTransaction,
   LabourProfile, LabourStats, LabourTransaction 
 } from '../api/labour';
 import { AddLabourModal } from './labour/AddLabourModal';
+import { EditLabourModal } from './labour/EditLabourModal';
 import { AttendanceModal } from './labour/AttendanceModal';
 import { AdvanceModal } from './labour/AdvanceModal';
 
@@ -23,9 +25,30 @@ export function Labour() {
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAttModalOpen, setIsAttModalOpen] = useState(false);
   const [isAdvModalOpen, setIsAdvModalOpen] = useState(false);
   const [selectedLabour, setSelectedLabour] = useState<LabourProfile | null>(null);
+
+  const handleDeleteLabour = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this labour profile? All history will be lost.')) return;
+    try {
+      await deleteLabour(id);
+      fetchData();
+    } catch (err) {
+      alert('Failed to delete labour');
+    }
+  };
+
+  const handleDeleteTransaction = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this transaction?')) return;
+    try {
+      await deleteTransaction(id);
+      fetchData();
+    } catch (err) {
+      alert('Failed to delete transaction');
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -172,20 +195,36 @@ export function Labour() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-600 font-medium">Balance Payable</p>
-                    <p className="text-xl font-bold text-red-600 leading-tight">PKR {labour.balance.toLocaleString()}</p>
+                  <div className="flex gap-1">
+                    <button 
+                      onClick={() => { setSelectedLabour(labour); setIsEditModalOpen(true); }}
+                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="Edit Profile"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteLabour(labour.id)}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete Profile"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                    <div className="text-right ml-2">
+                      <p className="text-xs text-slate-600 font-medium">Balance Payable</p>
+                      <p className="text-xl font-bold text-red-600 leading-tight">PKR {labour.balance.toLocaleString()}</p>
+                    </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-6">
                   <div className="bg-white rounded-lg p-3 border border-slate-100 shadow-sm">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Daily Wage</p>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Monthly wage</p>
                     <p className="text-sm font-bold text-[var(--navy)]">PKR {labour.daily_wage}</p>
                   </div>
                   <div className="bg-white rounded-lg p-3 border border-slate-100 shadow-sm">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Days Worked</p>
-                    <p className="text-sm font-bold text-blue-600">{labour.days_worked} days</p>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Attendance</p>
+                    <p className="text-sm font-bold text-blue-600">{labour.attendance_days} days</p>
                   </div>
                   <div className="bg-white rounded-lg p-3 border border-slate-100 shadow-sm">
                     <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1 font-bold">Advances</p>
@@ -263,6 +302,7 @@ export function Labour() {
                 <th className="text-center py-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
                 <th className="text-right py-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Amount</th>
                 <th className="text-left py-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Notes</th>
+                <th className="text-right py-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -286,11 +326,20 @@ export function Labour() {
                     PKR {txn.amount.toLocaleString()}
                   </td>
                   <td className="py-4 px-4 text-sm text-slate-500 italic max-w-xs truncate">{txn.notes || '-'}</td>
+                  <td className="py-4 px-4 text-right">
+                    <button 
+                      onClick={() => handleDeleteTransaction(txn.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                      title="Delete Transaction"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {transactions.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
                     No recent transactions found
                   </td>
                 </tr>
@@ -301,6 +350,7 @@ export function Labour() {
       </div>
 
       <AddLabourModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSuccess={fetchData} />
+      <EditLabourModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSuccess={fetchData} labour={selectedLabour} />
       <AttendanceModal isOpen={isAttModalOpen} onClose={() => setIsAttModalOpen(false)} onSuccess={fetchData} labour={selectedLabour} />
       <AdvanceModal isOpen={isAdvModalOpen} onClose={() => setIsAdvModalOpen(false)} onSuccess={fetchData} labour={selectedLabour} />
     </div>

@@ -22,7 +22,11 @@ export interface LabourProfile {
   phone: string;
   joining_date: string;
   status: 'active' | 'inactive' | 'left';
-  days_worked: number;
+  attendance_days: number;
+  total_months: number;
+  present_days: number;
+  absent_days: number;
+  half_days: number;
   total_earned: number;
   total_advances: number;
   balance: number;
@@ -128,6 +132,31 @@ export async function getLabourById(id: string): Promise<LabourProfile> {
 
 export async function getLabourHistory(id: string): Promise<{ attendance: AttendanceRecord[], transactions: LabourTransaction[] }> {
   const res = await fetch(`${BASE}/api/labour/${id}/history`, {
+    headers: authHeaders(),
+  });
+  return handleRes(res);
+}
+
+export async function updateLabour(id: number, data: Partial<LabourProfile>): Promise<LabourProfile> {
+  const res = await fetch(`${BASE}/api/labour/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(data),
+  });
+  return handleRes(res);
+}
+
+export async function deleteLabour(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/api/labour/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  return handleRes(res);
+}
+
+export async function deleteTransaction(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/api/labour/transactions/${id}`, {
+    method: 'DELETE',
     headers: authHeaders(),
   });
   return handleRes(res);

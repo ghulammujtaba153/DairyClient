@@ -1,33 +1,53 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { createLabour } from '../../api/labour';
+import { updateLabour, LabourProfile } from '../../api/labour';
 
-interface AddLabourModalProps {
+interface EditLabourModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  labour: LabourProfile | null;
 }
 
-export function AddLabourModal({ isOpen, onClose, onSuccess }: AddLabourModalProps) {
-  const [formData, setFormData] = useState({ name: '', role: '', daily_wage: '', phone: '' });
+export function EditLabourModal({ isOpen, onClose, onSuccess, labour }: EditLabourModalProps) {
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    role: '', 
+    daily_wage: '', 
+    phone: '',
+    status: 'active' as any
+  });
   const [submitting, setSubmitting] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (labour) {
+      setFormData({
+        name: labour.name || '',
+        role: labour.role || '',
+        daily_wage: String(labour.daily_wage || ''),
+        phone: labour.phone || '',
+        status: labour.status || 'active'
+      });
+    }
+  }, [labour]);
+
+  if (!isOpen || !labour) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setSubmitting(true);
-      await createLabour({
+      await updateLabour(labour.id, {
         name: formData.name,
         role: formData.role,
         daily_wage: Number(formData.daily_wage),
-        phone: formData.phone
+        phone: formData.phone,
+        status: formData.status
       });
       onSuccess();
       onClose();
     } catch (err) {
-      alert('Failed to add labour');
+      alert('Failed to update labour');
     } finally {
       setSubmitting(false);
     }
@@ -38,8 +58,8 @@ export function AddLabourModal({ isOpen, onClose, onSuccess }: AddLabourModalPro
       <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-xl">
         <div className="flex items-center justify-between mb-6 border-b pb-4">
           <div>
-            <h3 className="text-xl font-bold text-slate-900">Add New Labour</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Worker Onboarding</p>
+            <h3 className="text-xl font-bold text-slate-900">Edit Labour Profile</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Update worker information</p>
           </div>
           <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
             <X size={24} />
@@ -88,6 +108,19 @@ export function AddLabourModal({ isOpen, onClose, onSuccess }: AddLabourModalPro
               />
             </div>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+            <select
+              className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--dairy-green)] transition-all"
+              value={formData.status}
+              onChange={(e: any) => setFormData({ ...formData, status: e.target.value })}
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="left">Left</option>
+            </select>
+          </div>
           
           <div className="grid grid-cols-2 gap-3 mt-8 pt-4 border-t">
             <button
@@ -99,14 +132,14 @@ export function AddLabourModal({ isOpen, onClose, onSuccess }: AddLabourModalPro
             </button>
             <button
               type="submit" disabled={submitting}
-              className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-bold shadow-md shadow-green-900/10 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-bold shadow-md shadow-blue-900/10 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {submitting ? (
                 <>
                   <Loader2 className="animate-spin" size={18} />
-                  <span>Saving...</span>
+                  <span>Updating...</span>
                 </>
-              ) : 'Add Profile'}
+              ) : 'Update Profile'}
             </button>
           </div>
         </form>

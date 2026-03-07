@@ -4,24 +4,23 @@ import {
   ArrowLeft, 
   Calendar, 
   DollarSign, 
-  MapPin, 
   Phone, 
   Clock, 
-  CheckCircle2, 
-  XCircle,
   AlertCircle,
   TrendingUp,
   History,
-  Download,
-  Edit,
-  Trash2
+  CheckCircle2,
+  XCircle,
+  Percent
 } from 'lucide-react';
-import { getLabourById, getLabourHistory, deleteAttendance } from '../../api/labour';
+import { getLabourById, getLabourHistory, deleteAttendance, deleteTransaction } from '../../api/labour';
 import type { LabourProfile, AttendanceRecord, LabourTransaction } from '../../api/labour';
 import { AttendanceModal } from './AttendanceModal';
+import { AttendanceHistory } from './AttendanceHistory';
+import { PaymentHistory } from './PaymentHistory';
 
 export function LabourDetails() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const navigate = useNavigate();
   const [labour, setLabour] = useState<LabourProfile | null>(null);
   const [history, setHistory] = useState<{ attendance: AttendanceRecord[], transactions: LabourTransaction[] }>({ attendance: [], transactions: [] });
@@ -47,6 +46,16 @@ export function LabourDetails() {
     }
   };
 
+  const handleDeleteTransaction = async (txnId: number) => {
+    if (!confirm('Are you sure you want to delete this payment record?')) return;
+    try {
+      await deleteTransaction(txnId);
+      if (id) fetchData(id);
+    } catch (err) {
+      alert('Failed to delete transaction');
+    }
+  };
+
   const fetchData = async (labourId: string) => {
     try {
       setLoading(true);
@@ -65,7 +74,7 @@ export function LabourDetails() {
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[400px]">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--dairy-green)]"></div>
     </div>
   );
 
@@ -76,6 +85,10 @@ export function LabourDetails() {
       <button onClick={() => navigate('/labour')} className="ml-auto underline font-bold">Back to List</button>
     </div>
   );
+
+  const attendanceRate = labour.attendance_days > 0 
+    ? Math.round((labour.present_days / labour.attendance_days) * 100) 
+    : 0;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -90,189 +103,113 @@ export function LabourDetails() {
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">{labour.name}</h1>
           <p className="text-slate-500 font-medium flex items-center gap-2">
-            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">{labour.role}</span>
+            <span className="bg-[var(--dairy-green)] text-white px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">{labour.role}</span>
             • Joining Date: {new Date(labour.joining_date).toLocaleDateString()}
           </p>
         </div>
-        
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Profile Card */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-6">
-          <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3">Worker Profile</h2>
-          
-          <div className="space-y-4">
-             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                <Phone className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-tight">Phone Number</p>
-                <p className="text-slate-700 font-medium">{labour.phone || 'N/A'}</p>
-              </div>
+      {/* Financial Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+              <TrendingUp className="w-6 h-6" />
             </div>
-
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-50 text-green-600 rounded-lg">
-                <DollarSign className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-tight">Daily Wage</p>
-                <p className="text-slate-700 font-medium">RS {labour.daily_wage.toLocaleString()}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-50 text-orange-600 rounded-lg">
-                <Clock className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-tight">Status</p>
-                <p className={`font-bold capitalize ${labour.status === 'active' ? 'text-green-600' : 'text-slate-400'}`}>
-                  {labour.status}
-                </p>
-              </div>
-            </div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Earnings</span>
           </div>
-
-          
+          <div>
+            <p className="text-sm text-slate-500 font-medium">Total Earned</p>
+            <h3 className="text-3xl font-black text-slate-900">PKR {labour.total_earned.toLocaleString()}</h3>
+          </div>
+          <p className="text-xs text-slate-400">Fixed salary for {labour.total_months} month(s)</p>
         </div>
 
-        {/* Financial Summary */}
-        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200">
-            <TrendingUp className="w-8 h-8 opacity-50 mb-4" />
-            <p className="text-indigo-100 font-bold text-sm uppercase tracking-wider">Total Earned</p>
-            <h3 className="text-3xl font-black">RS {labour.total_earned.toLocaleString()}</h3>
-            <p className="text-indigo-200 text-xs mt-2">Based on {labour.days_worked} work days</p>
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="p-2 bg-orange-50 text-orange-600 rounded-lg">
+              <DollarSign className="w-6 h-6" />
+            </div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Advances</span>
           </div>
+          <div>
+            <p className="text-sm text-slate-500 font-medium">Total Advances</p>
+            <h3 className="text-3xl font-black text-orange-600">PKR {labour.total_advances.toLocaleString()}</h3>
+          </div>
+          <p className="text-xs text-slate-400">Pending deductions</p>
+        </div>
 
-          <div className="bg-orange-500 rounded-2xl p-6 text-white shadow-lg shadow-orange-200">
-            <DollarSign className="w-8 h-8 opacity-50 mb-4" />
-            <p className="text-orange-100 font-bold text-sm uppercase tracking-wider">Total Advances</p>
-            <h3 className="text-3xl font-black">RS {labour.total_advances.toLocaleString()}</h3>
-            <p className="text-orange-200 text-xs mt-2">Pending deduction from balance</p>
+        <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-lg space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">To Pay</span>
           </div>
-
-          <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-lg shadow-slate-200">
-            <AlertCircle className="w-8 h-8 opacity-50 mb-4 text-emerald-400" />
-            <p className="text-slate-400 font-bold text-sm uppercase tracking-wider">Current Balance</p>
-            <h3 className="text-3xl font-black text-emerald-400">RS {labour.balance.toLocaleString()}</h3>
-            <p className="text-slate-400 text-xs mt-2">Net payable to worker</p>
+          <div>
+            <p className="text-sm text-slate-300 font-medium">Current Balance</p>
+            <h3 className="text-3xl font-black text-emerald-400">PKR {labour.balance.toLocaleString()}</h3>
           </div>
+          <p className="text-xs text-slate-400">Net payable amount</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Attendance Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-green-50 rounded-xl p-4 border border-green-100 flex items-center gap-4">
+          <div className="p-2.5 bg-green-100 text-green-600 rounded-lg">
+            <CheckCircle2 size={24} />
+          </div>
+          <div>
+            <p className="text-xs text-green-700 font-bold uppercase tracking-tight">Present</p>
+            <p className="text-xl font-black text-green-900">{labour.present_days} Days</p>
+          </div>
+        </div>
+        <div className="bg-red-50 rounded-xl p-4 border border-red-100 flex items-center gap-4">
+          <div className="p-2.5 bg-red-100 text-red-600 rounded-lg">
+            <XCircle size={24} />
+          </div>
+          <div>
+            <p className="text-xs text-red-700 font-bold uppercase tracking-tight">Absent</p>
+            <p className="text-xl font-black text-red-900">{labour.absent_days} Days</p>
+          </div>
+        </div>
+        <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 flex items-center gap-4">
+          <div className="p-2.5 bg-blue-100 text-blue-600 rounded-lg">
+            <Clock size={24} />
+          </div>
+          <div>
+            <p className="text-xs text-blue-700 font-bold uppercase tracking-tight">Late / Half</p>
+            <p className="text-xl font-black text-blue-900">{labour.half_days} Days</p>
+          </div>
+        </div>
+        <div className="bg-purple-50 rounded-xl p-4 border border-purple-100 flex items-center gap-4">
+          <div className="p-2.5 bg-purple-100 text-purple-600 rounded-lg">
+            <Percent size={24} />
+          </div>
+          <div>
+            <p className="text-xs text-purple-700 font-bold uppercase tracking-tight">Attendance</p>
+            <p className="text-xl font-black text-purple-900">{attendanceRate}%</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-8">
         {/* Attendance History */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <Calendar className="w-6 h-6 text-primary" />
-              Recent Attendance
-            </h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {history.attendance.length > 0 ? history.attendance.map((att) => (
-                  <tr key={att.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-700">
-                      {new Date(att.date).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {att.status === 'present' && <span className="flex items-center gap-1 text-green-600 font-bold text-xs"><CheckCircle2 className="w-4 h-4" /> Present</span>}
-                      {att.status === 'absent' && <span className="flex items-center gap-1 text-red-600 font-bold text-xs"><XCircle className="w-4 h-4" /> Absent</span>}
-                      {att.status === 'late' && <span className="flex items-center gap-1 text-orange-600 font-bold text-xs"><Clock className="w-4 h-4" /> Late</span>}
-                      {att.status === 'half-day' && <span className="flex items-center gap-1 text-blue-600 font-bold text-xs"><Clock className="w-4 h-4" /> Half Day</span>}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => {
-                            setSelectedAttRecord(att);
-                            setIsAttModalOpen(true);
-                          }}
-                          title="Edit"
-                          className="text-blue-600 hover:text-blue-900 bg-blue-50 p-2 rounded-lg transition-colors border border-transparent hover:border-blue-200"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteAttendance(att.id)}
-                          title="Delete"
-                          className="text-red-500 hover:text-red-700 bg-red-50 p-2 rounded-lg transition-colors border border-transparent hover:border-red-200"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={3} className="px-6 py-12 text-center text-slate-400 font-medium">No attendance records yet</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <AttendanceHistory 
+          attendance={history.attendance} 
+          onEdit={(record) => {
+            setSelectedAttRecord(record);
+            setIsAttModalOpen(true);
+          }}
+          onDelete={handleDeleteAttendance}
+        />
 
         {/* Transaction History */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <History className="w-6 h-6 text-orange-500" />
-              Payment History
-            </h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Amount</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Method</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {history.transactions.length > 0 ? history.transactions.map((txn) => (
-                  <tr key={txn.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-700">
-                      {new Date(txn.date).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${
-                        txn.type === 'advance' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'
-                      }`}>
-                        {txn.type.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-black text-slate-900">
-                      ₹ {txn.amount.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 capitalize">
-                      {txn.payment_method}
-                    </td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400 font-medium">No transactions yet</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <PaymentHistory 
+          transactions={history.transactions}
+          onDelete={handleDeleteTransaction}
+        />
       </div>
 
       <AttendanceModal 

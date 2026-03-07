@@ -26,7 +26,7 @@ export function RawMaterial() {
 
   const fetchData = async (retryCount = 0) => {
     try {
-      setLoading(true);
+      if (retryCount === 0) setLoading(true);
       setError(null);
       const [materialsData, statsData, suppliersData] = await Promise.all([
         getRawMaterials(),
@@ -36,6 +36,7 @@ export function RawMaterial() {
       setRawMaterials(materialsData || []);
       setStats(statsData);
       setSuppliersList(suppliersData || []);
+      setLoading(false);
     } catch (err: any) {
       console.error('Fetch raw materials error:', err);
       if (retryCount < 1) {
@@ -44,11 +45,6 @@ export function RawMaterial() {
       } else {
         setError('Failed to load data. Please check your connection and try again.');
         setLoading(false);
-      }
-    } finally {
-      if (retryCount >= 1 || !error) {
-        // Only stop loading if we're done or there's no error
-        // If we're retrying, we keep loading true
       }
     }
   };
