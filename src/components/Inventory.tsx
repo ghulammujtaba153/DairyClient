@@ -349,15 +349,17 @@ export function Inventory() {
         {inventory.map((item: ProductStock, index: number) => {
           const inHand = Number(item.in_hand_quantity);
           const inMarket = Number(item.in_market_quantity);
-          const available = inHand - inMarket;
+          const totalStock = inHand + inMarket;
           const minStock = Number(item.min_stock_level);
-          const status = available < 0 ? 'oversold' : available < minStock ? 'low' : 'good';
+          const status = inHand < 0 ? 'oversold' : inHand < minStock ? 'low' : 'good';
           
-          // item.price is the total accumulated cost (Asset Value)
-          const totalValue = Number(item.price || 0);
-          const unitPrice = inHand > 0 ? totalValue / inHand : 0;
-          const valueInWarehouse = available * unitPrice;
-          const valueInMarket = inMarket * unitPrice;
+          // item.total_price is the total accumulated asset value
+          const totalAssetValue = Number(item.total_price || item.price || 0);
+          const unitAssetCost = inHand > 0 ? totalAssetValue / inHand : 0;
+          const valueInWarehouse = inHand * unitAssetCost;
+          
+          // item.valueInMarket is the real sale value from unpaid invoices
+          const valueInMarket = Number(item.valueInMarket || 0);
 
           return (
             <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:border-green-600 transition-all group">
@@ -398,7 +400,7 @@ export function Inventory() {
                     <ArrowDownLeft size={14} className="text-green-600" />
                   </div>
                   <p className="text-2xl font-bold text-green-700">
-                    {available} <span className="text-sm">{item.unit}</span>
+                    {inHand} <span className="text-sm">{item.unit}</span>
                   </p>
                   <p className="text-xs text-slate-600 mt-1">PKR {valueInWarehouse.toLocaleString()}</p>
                 </div>
@@ -414,9 +416,9 @@ export function Inventory() {
                 </div>
                 <div
                   className={`rounded-lg p-4 border transition-colors ${
-                    available < 0
+                    inHand < 0
                       ? 'bg-red-50 border-red-200 group-hover:bg-red-100/50'
-                      : available < minStock
+                      : inHand < minStock
                       ? 'bg-orange-50 border-orange-200 group-hover:bg-orange-100/50'
                       : 'bg-purple-50 border-purple-200 group-hover:bg-purple-100/50'
                   }`}
@@ -424,14 +426,14 @@ export function Inventory() {
                   <p className="text-xs text-slate-600 mb-1">Stock Total</p>
                   <p
                     className={`text-2xl font-bold ${
-                      available < 0
+                      inHand < 0
                         ? 'text-red-700'
-                        : available < minStock
+                        : inHand < minStock
                         ? 'text-orange-700'
                         : 'text-purple-700'
                     }`}
                   >
-                    {inHand} <span className="text-sm">{item.unit}</span>
+                    {totalStock} <span className="text-sm">{item.unit}</span>
                   </p>
                 </div>
               </div>
@@ -439,14 +441,14 @@ export function Inventory() {
               <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                 <div
                   className={`h-full ${
-                    available < 0
+                    inHand < 0
                       ? 'bg-red-500'
-                      : available < minStock
+                      : inHand < minStock
                       ? 'bg-orange-500'
                       : 'bg-green-500'
                   }`}
                   style={{
-                    width: `${Math.min(100, Math.max(0, (inHand / (inHand + inMarket || 1)) * 100))}%`,
+                    width: `${Math.min(100, Math.max(0, (inHand / (totalStock || 1)) * 100))}%`,
                   }}
                 ></div>
               </div>
@@ -486,7 +488,6 @@ export function Inventory() {
                 <th className="text-right py-4 px-4 text-sm font-semibold text-slate-700">Value (PKR)</th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-slate-700">Reference</th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-slate-700">Source/Destination</th>
-                <th className="text-center py-4 px-4 text-sm font-semibold text-slate-700">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -526,24 +527,7 @@ export function Inventory() {
                   </td>
                   <td className="py-4 px-4 text-sm text-slate-600">{movement.reference_id}</td>
                   <td className="py-4 px-4 text-sm text-slate-900 font-medium">{movement.source_destination}</td>
-                  <td className="py-4 px-4">
-                    <div className="flex items-center justify-center gap-2">
-                      <button 
-                        onClick={() => handleEdit(movement)}
-                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Edit Movement"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(movement.id)}
-                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete Movement"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
+                  
                 </tr>
               ))}
               {movements.length === 0 && (

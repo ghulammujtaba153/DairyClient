@@ -22,6 +22,7 @@ export interface ProductStock {
   unit: string;
   min_stock_level: number;
   price: number;
+  total_price?: number;
   status?: 'good' | 'low' | 'oversold';
   valueInHand?: number;
   valueInMarket?: number;

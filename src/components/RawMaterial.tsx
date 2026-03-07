@@ -1,7 +1,11 @@
 import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
-import { Plus, Search, DollarSign, Package, TrendingDown, Calendar, Loader2 } from 'lucide-react';
+import { Plus, Search, DollarSign, Package, TrendingDown, Calendar, Loader2, Edit2, Trash2, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getRawMaterials, getRawMaterialStats, createRawMaterial, RawMaterial as IRawMaterial, RawMaterialStats } from '../api/rawMaterial';
+import { 
+  getRawMaterials, getRawMaterialStats, createRawMaterial, 
+  updateRawMaterial, deleteRawMaterial,
+  RawMaterial as IRawMaterial, RawMaterialStats 
+} from '../api/rawMaterial';
 import { getSuppliers, Supplier } from '../api/suppliers';
 
 export function RawMaterial() {
@@ -11,7 +15,9 @@ export function RawMaterial() {
   const [rawMaterials, setRawMaterials] = useState<IRawMaterial[]>([]);
   const [stats, setStats] = useState<RawMaterialStats | null>(null);
   const [suppliersList, setSuppliersList] = useState<Supplier[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     supplier_id: '',
     material: 'Fresh Cream',
@@ -49,28 +55,67 @@ export function RawMaterial() {
     }
   };
 
+  const handleEdit = (purchase: IRawMaterial) => {
+    setEditingId(purchase.id || null);
+    setFormData({
+      supplier_id: String(purchase.supplier_id),
+      material: purchase.material,
+      quantity: String(purchase.quantity),
+      rate: String(purchase.price),
+      payment: Number(purchase.remaining_amount) <= 0 ? 'cash' : 'credit',
+    });
+    setShowPurchaseForm(true);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this purchase?')) return;
+    try {
+      await deleteRawMaterial(id);
+      fetchData();
+    } catch (err) {
+      console.error('Delete purchase error:', err);
+      alert('Failed to delete purchase');
+    }
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setFormData({ supplier_id: '', material: 'Fresh Cream', quantity: '', rate: '', payment: 'cash' });
+    setShowPurchaseForm(false);
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+    
     try {
+      setSubmitting(true);
       const quantity = Number(formData.quantity);
       const price = Number(formData.rate);
       const totalPrice = quantity * price;
       
-      await createRawMaterial({
+      const payload = {
         supplier_id: Number(formData.supplier_id),
         material: formData.material,
         quantity,
         unit: 'liters', // Default for now
         price,
         paid_amount: formData.payment === 'cash' ? totalPrice : 0,
-      });
+      };
+
+      if (editingId) {
+        await updateRawMaterial(editingId, payload);
+      } else {
+        await createRawMaterial(payload);
+      }
       
-      setShowPurchaseForm(false);
-      setFormData({ supplier_id: '', material: 'Fresh Cream', quantity: '', rate: '', payment: 'cash' });
+      resetForm();
       fetchData();
     } catch (err) {
       console.error('Submit purchase error:', err);
       alert('Failed to record purchase');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -104,7 +149,10 @@ export function RawMaterial() {
           <p className="text-sm text-slate-600 mt-1">Track purchases, suppliers, and raw material inventory</p>
         </div>
         <button
-          onClick={() => setShowPurchaseForm(true)}
+          onClick={() => {
+            resetForm();
+            setShowPurchaseForm(true);
+          }}
           className="flex items-center gap-2 px-4 py-2.5 bg-[var(--dairy-green-dark)] text-white rounded-lg hover:bg-[var(--dairy-green)] transition-colors"
         >
           <Plus size={20} />
@@ -247,6 +295,7 @@ export function RawMaterial() {
                 <th className="text-right py-3 px-4 text-sm font-medium text-slate-600">Rate</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-slate-600">Total</th>
                 <th className="text-center py-3 px-4 text-sm font-medium text-slate-600">Payment</th>
+                <th className="text-center py-3 px-4 text-sm font-medium text-slate-600">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -276,6 +325,24 @@ export function RawMaterial() {
                       {Number(purchase.remaining_amount) <= 0 ? 'Cash' : 'Credit'}
                     </span>
                   </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => handleEdit(purchase)}
+                        className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="Edit"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => purchase.id && handleDelete(purchase.id)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -286,8 +353,16 @@ export function RawMaterial() {
       {/* Purchase Form Modal */}
       {showPurchaseForm && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="mb-4 text-xl font-bold">New Purchase Entry</h3>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl relative">
+            <button 
+              onClick={resetForm}
+              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <X size={20} />
+            </button>
+            <h3 className="mb-4 text-xl font-bold">
+              {editingId ? 'Edit Purchase Entry' : 'New Purchase Entry'}
+            </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Supplier</label>
@@ -388,16 +463,24 @@ export function RawMaterial() {
               <div className="flex gap-3 mt-6">
                 <button
                   type="button"
-                  onClick={() => setShowPurchaseForm(false)}
+                  onClick={resetForm}
                   className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-[var(--dairy-green-dark)] text-white rounded-lg hover:bg-[var(--dairy-green)] transition-colors"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-[var(--dairy-green-dark)] text-white rounded-lg hover:bg-[var(--dairy-green)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Add Purchase
+                  {submitting ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    editingId ? 'Update Purchase' : 'Add Purchase'
+                  )}
                 </button>
               </div>
             </form>
