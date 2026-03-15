@@ -5,6 +5,7 @@ import { getSales, getSalesStats, createSale, updateSale, deleteSale, Sale, Sale
 import { getClients, Client } from '../api/clients';
 import { getProductions, Production } from '../api/production';
 import { getRawMaterials, RawMaterial } from '../api/rawMaterial';
+import { getInventory, ProductStock } from '../api/inventory';
 
 export function Sales() {
   const location = useLocation();
@@ -13,6 +14,7 @@ export function Sales() {
   const [clients, setClients] = useState<Client[]>([]);
   const [productions, setProductions] = useState<Production[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [inventory, setInventory] = useState<ProductStock[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -36,18 +38,20 @@ export function Sales() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [salesData, statsData, clientsData, prodData, rawData] = await Promise.all([
+      const [salesData, statsData, clientsData, prodData, rawData, invData] = await Promise.all([
         getSales(),
         getSalesStats(),
         getClients(),
         getProductions(),
-        getRawMaterials()
+        getRawMaterials(),
+        getInventory()
       ]);
       setSales(salesData);
       setStats(statsData);
       setClients(clientsData);
       setProductions(prodData);
       setRawMaterials(rawData);
+      setInventory(invData);
     } catch (err: any) {
       console.error('Fetch sales error:', err);
     } finally {
@@ -126,8 +130,37 @@ export function Sales() {
     .filter((s: Sale) => s.payment_status === 'credit' && new Date(s.created_at).toISOString().split('T')[0] === todayStr)
     .reduce((sum: number, s: Sale) => sum + Number(s.total), 0);
 
+  // ── Stock validation for the modal ──────────────────────────────────────────
+  // Resolve the product name currently selected in the form
+  const selectedItemName =
+    formData.item_type === 'production'
+      ? productions.find(p => String(p.id) === formData.item_id)?.production_name
+      : rawMaterials.find(r => String(r.id) === formData.item_id)?.material;
+
+  const selectedItemStock = selectedItemName
+    ? inventory.find(inv => inv.product_name === selectedItemName)
+    : null;
+
+  // When editing, add back the original sale's own quantity so the user
+  // isn't penalised when re-saving the same or lower quantity
+  const originalSaleQty = editingSale ? Number(editingSale.quantity) : 0;
+  const saleMaxAvailable = selectedItemStock
+    ? Number(selectedItemStock.in_hand_quantity) + originalSaleQty
+    : Infinity;
+  const saleEnteredQty = Number(formData.quantity);
+  const isSaleOverLimit =
+    selectedItemStock !== null &&
+    selectedItemStock !== undefined &&
+    formData.quantity !== '' &&
+    saleEnteredQty > saleMaxAvailable;
+  // ────────────────────────────────────────────────────────────────────────────
+
   const handleSubmit = async (e: any) => {
     e.preventDefault();
+    if (isSaleOverLimit) {
+      alert(`Quantity exceeds available stock. Maximum available: ${saleMaxAvailable} ${selectedItemStock?.unit || 'units'}`);
+      return;
+    }
     try {
       setSubmitting(true);
       const payload: Partial<Sale> = {
@@ -396,20 +429,62 @@ export function Sales() {
                     <label className="block text-sm font-medium text-slate-700 mb-1">Product</label>
                     <select
                       value={formData.item_id}
-                      onChange={(e: any) => setFormData({ ...formData, item_id: e.target.value })}
+                      onChange={(e: any) => setFormData({ ...formData, item_id: e.target.value, quantity: '' })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--dairy-green)]"
                       required
                     >
                       <option value="">Select Item</option>
                       {formData.item_type === 'production' ? 
-                        productions.map((p: Production) => (
-                            <option key={p.id} value={p.id}>{p.production_name}</option>
-                        )) : 
-                        rawMaterials.map((r: RawMaterial) => (
-                            <option key={r.id} value={r.id}>{r.material}</option>
-                        ))
+                        // Deduplicate productions by name — keep only the first record per unique production_name
+                        productions
+                          .filter((p, idx, arr) => arr.findIndex(x => x.production_name === p.production_name) === idx)
+                          .map((p: Production) => {
+                            const stock = inventory.find(inv => inv.product_name === p.production_name);
+                            const inHand = stock ? Number(stock.in_hand_quantity) : null;
+                            const unit = stock?.unit || 'kg';
+                            const stockLabel = inHand !== null ? ` — In hand: ${inHand} ${unit}` : '';
+                            return (
+                              <option key={p.id} value={p.id}>
+                                {p.production_name}{stockLabel}
+                              </option>
+                            );
+                          })
+                        : 
+                        // Deduplicate raw materials by name — keep only the first record per unique material
+                        rawMaterials
+                          .filter((r, idx, arr) => arr.findIndex(x => x.material === r.material) === idx)
+                          .map((r: RawMaterial) => {
+                            const stock = inventory.find(inv => inv.product_name === r.material);
+                            const inHand = stock ? Number(stock.in_hand_quantity) : null;
+                            const unit = stock?.unit || r.unit || 'kg';
+                            const stockLabel = inHand !== null ? ` — In hand: ${inHand} ${unit}` : '';
+                            return (
+                              <option key={r.id} value={r.id}>
+                                {r.material}{stockLabel}
+                              </option>
+                            );
+                          })
                       }
                     </select>
+                    {/* Stock hint shown when an item is selected */}
+                    {formData.item_id && (() => {
+                      const selectedName = formData.item_type === 'production'
+                        ? productions.find(p => String(p.id) === formData.item_id)?.production_name
+                        : rawMaterials.find(r => String(r.id) === formData.item_id)?.material;
+                      const stock = selectedName ? inventory.find(inv => inv.product_name === selectedName) : null;
+                      if (!stock) return null;
+                      const inHand = Number(stock.in_hand_quantity);
+                      return (
+                        <p className={`text-xs mt-1 font-medium ${
+                          inHand <= 0 ? 'text-red-500' : inHand < 10 ? 'text-orange-500' : 'text-green-600'
+                        }`}>
+                          {inHand <= 0
+                            ? `⚠ No stock available (${inHand} ${stock.unit})`
+                            : `✓ Available: ${inHand} ${stock.unit} in hand`
+                          }
+                        </p>
+                      );
+                    })()}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
@@ -417,10 +492,27 @@ export function Sales() {
                       type="number"
                       value={formData.quantity}
                       onChange={(e: any) => setFormData({ ...formData, quantity: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--dairy-green)]"
-                      placeholder="10"
+                      className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                        isSaleOverLimit
+                          ? 'border-red-400 focus:ring-red-400 bg-red-50'
+                          : 'border-slate-300 focus:ring-[var(--dairy-green)]'
+                      }`}
+                      placeholder={selectedItemStock ? `Max ${saleMaxAvailable}` : '10'}
+                      max={saleMaxAvailable !== Infinity ? saleMaxAvailable : undefined}
+                      min={0}
+                      step="0.01"
                       required
                     />
+                    {isSaleOverLimit && (
+                      <p className="text-xs mt-1 font-medium text-red-600">
+                        ⚠ Exceeds stock by {(saleEnteredQty - saleMaxAvailable).toFixed(2)} {selectedItemStock?.unit}. Max: {saleMaxAvailable} {selectedItemStock?.unit}.
+                      </p>
+                    )}
+                    {!isSaleOverLimit && selectedItemStock && formData.quantity && (
+                      <p className="text-xs mt-1 text-slate-500">
+                        Remaining after sale: {(saleMaxAvailable - saleEnteredQty).toFixed(2)} {selectedItemStock.unit}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 mt-4">
@@ -494,8 +586,12 @@ export function Sales() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-[var(--dairy-green-dark)] text-white rounded-lg hover:bg-[var(--dairy-green)] transition-colors flex items-center justify-center gap-2"
+                  disabled={submitting || !!isSaleOverLimit}
+                  className={`flex-1 px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                    submitting || isSaleOverLimit
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : 'bg-[var(--dairy-green-dark)] text-white hover:bg-[var(--dairy-green)]'
+                  }`}
                 >
                   {submitting && <Loader2 size={18} className="animate-spin" />}
                   {submitting ? 'Saving...' : editingSale ? 'Update Invoice' : 'Create Invoice'}

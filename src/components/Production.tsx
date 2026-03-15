@@ -3,6 +3,7 @@ import { Plus, Factory, TrendingUp, Loader2, Edit, Trash2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getProductions, getProductionStats, createProduction, updateProduction, deleteProduction, Production as ProductionModel, ProductionStats } from '../api/production';
 import { getRawMaterials, RawMaterial } from '../api/rawMaterial';
+import { getInventory, ProductStock } from '../api/inventory';
 
 const productTabs = ['Desi Ghee', 'Butter', 'Khoya'];
 
@@ -14,7 +15,9 @@ export function Production() {
   const [productions, setProductions] = useState<ProductionModel[]>([]);
   const [stats, setStats] = useState<ProductionStats | null>(null);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [inventory, setInventory] = useState<ProductStock[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     production_name: 'Desi Ghee',
@@ -35,14 +38,16 @@ export function Production() {
     try {
       setLoading(true);
       setError(null);
-      const [prodData, statsData, rmData] = await Promise.all([
+      const [prodData, statsData, rmData, invData] = await Promise.all([
         getProductions(),
         getProductionStats(),
-        getRawMaterials()
+        getRawMaterials(),
+        getInventory()
       ]);
       setProductions(prodData || []);
       setStats(statsData);
       setRawMaterials(rmData || []);
+      setInventory(invData || []);
     } catch (err: any) {
       console.error('Fetch production error:', err);
       if (retryCount < 1) {
@@ -58,9 +63,33 @@ export function Production() {
     }
   };
 
+  // Derive available in-hand stock for a given material name from inventory
+  const getAvailableStock = (materialName: string): number => {
+    const inv = inventory.find(i => i.product_name === materialName);
+    return inv ? Number(inv.in_hand_quantity) : 0;
+  };
+
+  // For the currently selected raw material, compute the usable available qty.
+  // When editing, we add back the original batch's usage so the user isn't blocked
+  // from re-saving the same or lower quantity.
+  const selectedRM = rawMaterials.find(rm => String(rm.id) === formData.raw_material_id);
+  const originalBatchQty = editingId
+    ? (productions.find(p => p.id === editingId)?.raw_material_quantity || 0)
+    : 0;
+  const maxAvailable = selectedRM
+    ? getAvailableStock(selectedRM.material) + Number(originalBatchQty)
+    : Infinity;
+  const enteredQty = Number(formData.raw_material_quantity);
+  const isOverLimit = selectedRM && formData.raw_material_quantity !== '' && enteredQty > maxAvailable;
+
   const handleSubmit = async (e: any) => {
     e.preventDefault();
+    if (isOverLimit) {
+      alert(`Quantity exceeds available stock. Maximum available: ${maxAvailable} ${selectedRM?.unit || 'units'}`);
+      return;
+    }
     try {
+      setSubmitting(true);
       const labour = Number(formData.labour_cost);
       const other = Number(formData.other_cost);
       const inputQty = Number(formData.raw_material_quantity);
@@ -93,6 +122,8 @@ export function Production() {
     } catch (err: any) {
       console.error('Submit production error:', err);
       alert('Failed to save production: ' + err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -382,28 +413,66 @@ export function Production() {
                     <label className="block text-sm font-medium text-slate-700 mb-1">Material</label>
                     <select 
                       value={formData.raw_material_id}
-                      onChange={(e) => setFormData({ ...formData, raw_material_id: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, raw_material_id: e.target.value, raw_material_quantity: '' })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--dairy-green)]"
                       required
                     >
-                      <option value="">Select Material Batch</option>
-                      {rawMaterials.map((rm: RawMaterial) => (
-                        <option key={rm.id} value={rm.id}>
-                          {rm.material} ({rm.quantity} {rm.unit}) - {rm.supplier_name}
-                        </option>
-                      ))}
+                      <option value="">Select Material</option>
+                      {/* Deduplicate by material name and show available stock */}
+                      {rawMaterials
+                        .filter((rm, idx, arr) => arr.findIndex(x => x.material === rm.material) === idx)
+                        .map((rm: RawMaterial) => {
+                          const avail = getAvailableStock(rm.material);
+                          return (
+                            <option key={rm.id} value={rm.id}>
+                              {rm.material} — Available: {avail} {rm.unit}
+                            </option>
+                          );
+                        })
+                      }
                     </select>
+                    {/* Available stock hint below the select */}
+                    {selectedRM && (
+                      <p className={`text-xs mt-1 font-medium ${
+                        maxAvailable <= 0 ? 'text-red-500' : maxAvailable < 50 ? 'text-orange-500' : 'text-green-600'
+                      }`}>
+                        {maxAvailable <= 0
+                          ? `⚠ No stock available for ${selectedRM.material}`
+                          : `✓ Available in hand: ${maxAvailable} ${selectedRM.unit}`
+                        }
+                      </p>
+                    )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Quantity (liters)</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Quantity ({selectedRM?.unit || 'units'})
+                    </label>
                     <input
                       type="number"
                       value={formData.raw_material_quantity}
                       onChange={(e: any) => setFormData({ ...formData, raw_material_quantity: e.target.value })}
-                      placeholder="100"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--dairy-green)]"
+                      placeholder={selectedRM ? `Max ${maxAvailable}` : '0'}
+                      max={maxAvailable !== Infinity ? maxAvailable : undefined}
+                      min={0}
+                      step="0.01"
+                      className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                        isOverLimit
+                          ? 'border-red-400 focus:ring-red-400 bg-red-50'
+                          : 'border-slate-300 focus:ring-[var(--dairy-green)]'
+                      }`}
                       required
                     />
+                    {/* Real-time over-limit warning */}
+                    {isOverLimit && (
+                      <p className="text-xs mt-1 font-medium text-red-600">
+                        ⚠ Exceeds available stock by {(enteredQty - maxAvailable).toFixed(2)} {selectedRM?.unit}. Max: {maxAvailable} {selectedRM?.unit}.
+                      </p>
+                    )}
+                    {!isOverLimit && selectedRM && formData.raw_material_quantity && (
+                      <p className="text-xs mt-1 text-slate-500">
+                        Remaining after use: {(maxAvailable - enteredQty).toFixed(2)} {selectedRM.unit}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -488,9 +557,15 @@ export function Production() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-[var(--dairy-green-dark)] text-white rounded-lg hover:bg-[var(--dairy-green)] transition-colors"
+                  disabled={!!isOverLimit || submitting}
+                  className={`flex-1 px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                    isOverLimit || submitting
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : 'bg-[var(--dairy-green-dark)] text-white hover:bg-[var(--dairy-green)]'
+                  }`}
                 >
-                  {editingId ? 'Update Batch' : 'Add Production Batch'}
+                  {submitting && <Loader2 size={16} className="animate-spin" />}
+                  {submitting ? 'Saving...' : editingId ? 'Update Batch' : 'Add Production Batch'}
                 </button>
               </div>
             </form>

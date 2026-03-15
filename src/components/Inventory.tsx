@@ -279,7 +279,7 @@ export function Inventory() {
           <p className="text-sm text-slate-600 mt-1">Monitor product stock levels and movements</p>
         </div>
         <div className="flex gap-3">
-          <button 
+          {/* <button 
             onClick={() => {
               setEditingMovement(null);
               setIsModalOpen(true);
@@ -288,7 +288,7 @@ export function Inventory() {
           >
             <Plus size={20} />
             Record Movement
-          </button>
+          </button> */}
           <button className="flex items-center gap-2 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors">
             <Filter size={20} />
             Filter
